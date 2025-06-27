@@ -1,0 +1,1229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redshift Serverless Performance Executive Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chosen Palette: Executive Blue-Gray Harmony with Vibrant Accents and Depth -->
+    <!-- Application Structure Plan: A single-page interactive web application structured into four distinct, tab-navigated sections, specifically redesigned for executive-level presentation. The navigation bar itself is a focal point, featuring prominent icons, bold colors, and dynamic transitions to enhance visual appeal and intuitive interaction. It includes: a dynamic 'Dashboard' for an executive overview with user-uploaded data; a detailed 'KPI Deep Dive' allowing granular analysis and per-KPI data visualization via CSV uploads; an 'Optimization Strategies' section with collapsible best practices; and a 'System Views Reference' for quick lookups. This modular, non-linear architecture prioritizes user autonomy and quick access to relevant information, enhancing explorability for diverse audiences (from executives to executives to technical managers). -->
+    <!-- Visualization & Content Choices: Leverages Chart.js for all interactive visualizations (line, bar, doughnut charts), using a high-intensity color palette for clear data presentation. Each chart is meticulously configured for responsiveness, clear labeling, and dynamic data updates from user-uploaded CSVs. Tables are employed for KPIs where tabular data is inherently clearer (e.g., Disk Spills). All admin SQL queries are embedded with copy functionality. Icons are implemented using Unicode characters in navigation and section headers for immediate visual understanding and executive appeal. The design emphasizes clean data presentation, intuitive interaction, and a polished, dynamic feel to ensure a "wow factor" through functional elegance and data-driven insights, strictly adhering to NO SVG graphics (except for inline unicode icons as specified in requirements) and NO Mermaid JS. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            background-color: #eef2f6; /* A slightly deeper light blue-gray for a richer background */
+            font-family: 'Inter', sans-serif;
+            color: #2c3e50; /* Darker charcoal for primary text, more impactful */
+            line-height: 1.6;
+            overflow-x: hidden; /* Prevent horizontal scroll on small screens */
+        }
+        .container {
+            max-width: 1400px;
+            padding-left: 1.5rem; /* Ensure padding on edges */
+            padding-right: 1.5rem; /* Ensure padding on edges */
+        }
+        /* Enhanced Navigation Button Styles */
+        .nav-btn {
+            @apply py-5 px-4 text-xl font-semibold transition-all duration-300 relative overflow-hidden flex-grow flex items-center justify-center space-x-2; /* Removed min-width, added flex-grow, reduced horizontal padding and space-x */
+            color: #607d8b; /* Muted blue-gray for inactive tabs */
+            border-radius: 0.75rem 0.75rem 0 0; /* Rounded top corners */
+            box-shadow: 0 -2px 5px rgba(0,0,0,0.05); /* Subtle top shadow for depth */
+            text-align: center; /* Center text within buttons */
+            white-space: normal; /* Allow text to wrap if necessary */
+        }
+        .nav-active {
+            @apply text-blue-700 font-extrabold;
+            background-color: #ffffff; /* White background for active tab */
+            box-shadow: inset 0 -5px 0 0 #2196f3, 0 8px 20px rgba(0,0,0,0.15); /* Stronger blue underline and deeper, more spread shadow */
+            transform: translateY(-8px); /* More pronounced lift for active tab */
+            z-index: 10; /* Bring active tab to front */
+        }
+        .nav-inactive:hover {
+            color: #3f51b5; /* Darker blue on hover */
+            background-color: #e3f2fd; /* Lightest blue background on hover */
+            transform: translateY(-4px); /* More subtle lift on hover */
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1); /* Slightly more pronounced shadow on hover */
+        }
+        /* Icon styling within nav buttons */
+        .nav-btn span.nav-icon {
+            font-size: 1.9rem; /* Slightly larger icons */
+            line-height: 1; /* Align text better */
+            transition: transform 0.2s, color 0.2s; /* Smooth icon transition */
+        }
+        .nav-active span.nav-icon {
+            color: #1a73e8; /* Deeper blue for active icon */
+            transform: scale(1.15); /* More pronounced larger icon when active */
+        }
+        
+        /* KPI List Item Styling */
+        .kpi-active {
+            background-color: #bbdefb; /* Brighter blue for active KPI in sidebar */
+            font-weight: 700;
+            border-left: 6px solid #1a73e8; /* Stronger, executive blue accent */
+            padding-left: calc(1.5rem - 6px); /* Adjust padding */
+            color: #1a237e; /* Very dark blue for active KPI text */
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15); /* More pronounced shadow for active KPI */
+            transform: translateX(5px); /* Slide slightly on active */
+        }
+        .kpi-list-item {
+            @apply p-4 rounded-lg cursor-pointer transition-all duration-200;
+        }
+        .kpi-list-item:hover:not(.kpi-active) {
+            background-color: #e0f2f7; /* Very subtle hover state */
+            transform: translateX(3px); /* Slight movement on hover */
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08); /* More subtle shadow on hover */
+        }
+
+        /* Card Styling */
+        .card {
+            @apply bg-white p-8 rounded-2xl shadow-xl border border-gray-100 hover:shadow-2xl transition-all duration-300;
+        }
+        .code-block {
+            background-color: #212121; /* Deep dark gray for code blocks */
+            color: #e0f2f7; /* Off-white for code text */
+            padding: 1.5rem;
+            border-radius: 1rem; /* More rounded corners */
+            overflow-x: auto;
+            font-family: 'Fira Code', 'Monaco', monospace;
+            font-size: 0.95rem; /* Slightly larger font */
+            position: relative;
+            box-shadow: inset 0 3px 6px rgba(0,0,0,0.15);
+        }
+        .copy-button {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            background-color: #424242; /* Darker button for contrast */
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.75rem;
+            font-size: 0.9rem;
+            cursor: pointer;
+            border: none;
+            transition: background-color 0.2s, transform 0.1s;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.25);
+        }
+        .copy-button:hover {
+            background-color: #616161;
+            transform: translateY(-2px);
+        }
+        /* Chart Container Styling */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 1100px; /* Even wider for more impactful charts */
+            margin-left: auto;
+            margin-right: auto;
+            height: 500px; /* Base height */
+            max-height: 600px; /* Maximum height */
+            padding: 1.5rem; /* More padding inside chart container */
+            border-radius: 1rem;
+            background-color: #ffffff;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 550px;
+            }
+        }
+         @media (min-width: 1024px) {
+            .chart-container {
+                height: 600px;
+            }
+        }
+        .csv-upload-area {
+            @apply p-6 border-2 border-dashed border-blue-200 rounded-xl bg-blue-50 text-center cursor-pointer hover:bg-blue-100 transition-colors duration-200;
+        }
+        .csv-upload-area input[type="file"] {
+            display: none;
+        }
+        /* Styling for the chevron in details tags */
+        details summary::-webkit-details-marker {
+            display: none; /* Hide default marker for Chrome */
+        }
+        details summary::marker {
+            display: none; /* Hide default marker for Firefox */
+        }
+        details summary {
+            display: flex; /* Allow flexbox properties */
+            align-items: center; /* Vertically align items */
+            justify-content: space-between; /* Space out title and icon */
+            cursor: pointer;
+        }
+        details summary .chevron {
+            transition: transform 0.2s ease-in-out;
+        }
+        details[open] summary .chevron {
+            transform: rotate(90deg); /* Rotate chevron when open */
+        }
+        /* Table row styling for readability */
+        #kpi-table-container table tbody tr:nth-child(odd) {
+            background-color: #f8fafc; /* Tailwind gray-50 equivalent for odd rows */
+        }
+        #kpi-table-container table tbody tr:hover {
+            background-color: #e0f2fe; /* Light blue on hover for table rows */
+        }
+
+        /* Responsive font size for nav buttons */
+        @media (max-width: 1024px) { /* On medium desktops and smaller */
+            .nav-btn {
+                font-size: 1.1rem; /* Smaller font size */
+                padding-left: 0.75rem;
+                padding-right: 0.75rem;
+            }
+            .nav-btn span.nav-icon {
+                font-size: 1.5rem; /* Adjust icon size */
+            }
+        }
+        @media (max-width: 768px) { /* On tablets and smaller */
+            .nav-btn {
+                font-size: 0.9rem; /* Even smaller font size */
+                padding-left: 0.5rem;
+                padding-right: 0.5rem;
+                flex-direction: column; /* Stack icon and text */
+                space-x: 0; /* Remove horizontal space */
+                space-y: 0.25rem; /* Add vertical space */
+            }
+            .nav-btn span.nav-icon {
+                font-size: 1.2rem; /* Smallest icon size for mobile */
+            }
+            .nav-btn.nav-active {
+                transform: translateY(-4px); /* Less dramatic lift on mobile */
+                box-shadow: inset 0 -3px 0 0 #2196f3, 0 4px 10px rgba(0,0,0,0.1); /* Smaller shadow */
+            }
+            .nav-btn.nav-inactive:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+            }
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code&display=swap" rel="stylesheet">
+</head>
+<body class="text-gray-800">
+
+    <div class="container mx-auto px-6 py-12">
+        <header class="text-center mb-16">
+            <h1 class="text-7xl font-extrabold text-gray-900 leading-tight tracking-tighter">
+                Redshift Serverless <br class="md:hidden">Performance Insights
+            </h1>
+            <p class="text-xl text-gray-700 mt-6 max-w-4xl mx-auto">
+                Unlock actionable insights, debug bottlenecks, and optimize costs.
+            </p>
+        </header>
+
+        <nav class="flex justify-center border-b-2 border-blue-200 mb-14">
+            <button class="nav-btn nav-active" data-tab="dashboard">
+                <span class="nav-icon">🏠</span> Dashboard
+            </button>
+            <button class="nav-btn nav-inactive" data-tab="kpi">
+                <span class="nav-icon">💡</span> KPI Deep Dive
+            </button>
+            <button class="nav-btn nav-inactive" data-tab="optimization">
+                <span class="nav-icon">⚙️</span> Optimization Strategies
+            </button>
+            <button class="nav-btn nav-inactive" data-tab="reference">
+                <span class="nav-icon">📚</span> System Views Reference
+            </button>
+        </nav>
+
+        <main>
+            <!-- Dashboard Section -->
+            <div id="dashboard" class="tab-content">
+                <div class="card mb-12">
+                    <h2 class="text-3xl font-bold mb-5 text-gray-800 flex items-center">
+                        <span class="text-blue-600 text-4xl mr-3">🚀</span> Executive Summary & Overview
+                    </h2>
+                    <p class="text-gray-700 leading-relaxed text-lg">
+                        This dynamic dashboard provides a high-level view of your Redshift Serverless performance and cost. Upload your usage data to instantly visualize trends, assess efficiency, and gain critical insights for strategic decision-making.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
+                     <div class="card flex items-center p-6 bg-blue-100/50">
+                        <div class="mr-6 text-blue-700 text-5xl">⏱️</div>
+                        <div>
+                            <h3 class="text-gray-600 text-base font-medium">Avg Query Time (Last 24h)</h3>
+                            <p class="text-5xl font-extrabold text-blue-900">1.2s</p>
+                        </div>
+                    </div>
+                     <div class="card flex items-center p-6 bg-green-100/50">
+                        <div class="mr-6 text-green-700 text-5xl">💰</div>
+                        <div>
+                            <h3 class="text-gray-600 text-base font-medium">Daily Cost (Est.)</h3>
+                            <p class="text-5xl font-extrabold text-green-900">$27.50</p>
+                        </div>
+                    </div>
+                     <div class="card flex items-center p-6 bg-red-100/50">
+                        <div class="mr-6 text-red-700 text-5xl">🚨</div>
+                        <div>
+                            <h3 class="text-gray-600 text-base font-medium">Query Error Rate</h3>
+                            <p class="text-5xl font-extrabold text-red-900">0.8%</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2 class="text-2xl font-bold mb-4 text-gray-800 flex items-center">
+                        <span class="text-green-600 text-4xl mr-3">📈</span> Daily RPU Utilization & Cost Trends
+                    </h2>
+                    <p class="text-gray-600 mb-6 text-lg">
+                        Upload your daily Redshift Serverless usage data via CSV to dynamically populate this chart. This visualization shows the daily Redshift Processing Units (RPUs) consumed and the estimated cost, allowing you to track trends and correlate resource usage with expenditure over time.
+                    </p>
+                     <label for="dashboardCsvFileInput" class="csv-upload-area mb-10">
+                        <input type="file" id="dashboardCsvFileInput" accept=".csv">
+                        <div class="flex flex-col items-center justify-center py-5">
+                            <span class="text-6xl mb-4 text-blue-400">☁️</span>
+                            <p class="text-blue-800 font-bold text-xl">Drag & Drop or Click to Upload CSV</p>
+                            <p class="text-blue-600 text-sm mt-2">Expected columns: <code class="font-mono text-sm text-blue-700">Date</code>, <code class="font-mono text-sm text-blue-700">AvgRPU</code>, <code class="font-mono text-sm text-blue-700">EstCost</code></p>
+                            <p id="dashboardUploadStatus" class="text-base mt-3 font-semibold"></p>
+                        </div>
+                    </label>
+                    
+                    <div class="chart-container">
+                        <canvas id="dashboardChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KPI Deep Dive Section -->
+            <div id="kpi" class="tab-content hidden">
+                <div class="card mb-12">
+                    <h2 class="text-3xl font-bold mb-4 text-gray-800 flex items-center">
+                        <span class="text-purple-600 text-4xl mr-3">🔬</span> Key Performance Indicators Deep Dive
+                    </h2>
+                    <p class="text-gray-700 leading-relaxed text-lg">
+                        Dive deep into the most critical Key Performance Indicators (KPIs) for Amazon Redshift Serverless. Select any KPI from the left sidebar to view its detailed definition, significance, a dynamic visualization based on your uploaded data, the latest administrative SQL query to retrieve its metrics, and an in-depth analysis of its implications. Understand the granular details that drive your Redshift performance.
+                    </p>
+                </div>
+                <div class="flex flex-col md:flex-row gap-8">
+                    <aside class="w-full md:w-1/4 card p-6 flex-shrink-0">
+                        <h2 class="text-xl font-bold mb-5 text-gray-800">Select a KPI</h2>
+                        <ul id="kpi-list" class="space-y-2">
+                        </ul>
+                    </aside>
+                    <section id="kpi-content-area" class="w-full md:w-3/4">
+                        <div id="kpi-placeholder" class="text-center py-20 bg-white rounded-xl shadow-lg border border-gray-100">
+                            <span class="text-7xl mb-4 block text-blue-400">🔍</span>
+                            <h2 class="text-3xl font-bold text-gray-700 mb-4">Begin Your Deep Dive</h2>
+                            <p class="text-gray-500 mt-2 max-w-md mx-auto text-lg">Select a Key Performance Indicator from the left sidebar to explore its details, analyze its impact, and upload your own data for dynamic visualization.</p>
+                        </div>
+                        <div id="kpi-detail-content" class="hidden card">
+                            <h2 id="kpi-title" class="text-3xl font-bold mb-3 text-gray-800"></h2>
+                            <p id="kpi-description" class="text-gray-600 mb-8 leading-relaxed text-lg"></p>
+                            
+                            <h3 class="text-2xl font-semibold mb-4 text-gray-800">Visualize Your Data</h3>
+                            <p id="kpiUploadInstruction" class="text-gray-600 mb-4 text-base"></p>
+                            <label for="kpiCsvFileInput" class="csv-upload-area mb-10">
+                                <input type="file" id="kpiCsvFileInput" accept=".csv">
+                                <div class="flex flex-col items-center justify-center py-4">
+                                    <span class="text-5xl mb-2 text-blue-400">📈</span>
+                                    <p class="text-blue-800 font-bold text-lg">Upload CSV for this KPI</p>
+                                    <p id="kpiUploadStatus" class="text-base mt-2 font-semibold"></p>
+                                </div>
+                            </label>
+
+                            <div id="kpi-chart-container-wrapper" class="mb-10">
+                               <div class="chart-container">
+                                    <canvas id="kpi-chart"></canvas>
+                                </div>
+                            </div>
+                             <div id="kpi-table-container" class="hidden overflow-x-auto mb-10 card"></div>
+                            
+                            <h3 class="text-2xl font-semibold mb-4 mt-10 text-gray-800">Admin Query</h3>
+                             <div class="code-block mb-10">
+                                <button class="copy-button" onclick="copyCode(this)">Copy</button>
+                                <pre><code id="kpi-query"></code></pre>
+                            </div>
+
+                            <h3 class="text-2xl font-semibold mb-4 mt-10 text-gray-800">Analysis and Implications</h3>
+                            <div id="kpi-analysis" class="prose max-w-none text-gray-700 leading-relaxed text-lg"></div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- Optimization Section -->
+            <div id="optimization" class="tab-content hidden">
+                <div class="card mb-12">
+                    <h2 class="text-3xl font-bold mb-4 text-gray-800 flex items-center">
+                        <span class="text-orange-600 text-4xl mr-3">🛠️</span> Advanced Optimization Strategies
+                    </h2>
+                    <p class="text-gray-700 leading-relaxed text-lg mb-8">
+                        Optimizing Amazon Redshift Serverless involves a multi-faceted approach, combining best practices in query writing, table design, workload management, and data pipeline efficiency. While the serverless model automates much of the infrastructure, strategic interventions at the data and query layers remain crucial for maximizing performance and cost-effectiveness. Explore these sections to refine your Redshift Serverless implementation and achieve peak operational efficiency.
+                    </p>
+                    <div id="optimization-content" class="space-y-6"></div>
+                </div>
+            </div>
+
+            <!-- Reference Section -->
+            <div id="reference" class="tab-content hidden">
+                <div class="card mb-12">
+                    <h2 class="text-3xl font-bold mb-4 text-gray-800 flex items-center">
+                        <span class="text-teal-600 text-4xl mr-3">📖</span> Essential System Views Reference
+                    </h2>
+                    <p class="text-gray-700 leading-relaxed text-lg mb-8">
+                        Understanding and utilizing these essential system views are fundamental for comprehensive performance monitoring in a Redshift Serverless environment. The unified `SYS` views streamline monitoring by consolidating metrics and providing a consistent experience across Redshift deployment types. This table provides a quick reference to the most important views and their primary purpose, aiding in rapid diagnostics and in-depth analysis.
+                    </p>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 rounded-xl overflow-hidden shadow-md">
+                            <thead class="bg-blue-100">
+                                <tr>
+                                    <th scope="col" class="px-6 py-4 text-left text-sm font-bold text-blue-800 uppercase tracking-wider">View Name</th>
+                                    <th scope="col" class="px-6 py-4 text-left text-sm font-bold text-blue-800 uppercase tracking-wider">Primary Purpose</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reference-table-body" class="bg-white divide-y divide-gray-200">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const appData = {
+            kpis: [
+                {
+                    id: 'query_execution_time',
+                    title: 'Query Execution Time',
+                    description: 'Measures the total time a query takes from submission to completion, broken down into its constituent phases: planning, queuing, lock waiting, and actual execution. This is the most direct measure of user-perceived performance.',
+                    query: `SELECT
+    query_id,
+    query_text,
+    user_id,
+    status,
+    start_time,
+    end_time,
+    elapsed_time AS total_elapsed_us, -- in microseconds
+    execution_time AS actual_execution_us,
+    planning_time AS planning_us,
+    compile_time AS compile_us,
+    lock_wait_time AS lock_wait_us,
+    queue_time AS queue_us
+FROM sys_query_history
+WHERE start_time >= GETDATE() - INTERVAL '7 days' -- Serverless retains 5-7 days of history [19]
+ORDER BY elapsed_time DESC
+LIMIT 10;`,
+                    analysis: `<ul>
+                        <li class="mb-2"><strong>High Queue Time:</strong> Indicates that queries are spending a significant portion of their total <code>elapsed_time</code> waiting for available compute resources (RPUs) rather than actively executing. This suggests that the configured Max RPU limit is being hit too frequently, or the base RPU is set too low for typical peak loads. Consider increasing the Max RPU or adjusting the AI-driven scaling profile towards performance.</li>
+                        <li class="mb-2"><strong>High Lock Wait Time:</strong> Points to concurrency issues where transactions are holding locks on tables or rows needed by other queries. This is a logical bottleneck that scaling RPUs cannot solve. Review application logic for long-running transactions.</li>
+                        <li class="mb-2"><strong>High Planning/Compile Time:</strong> Suggests the query optimizer is struggling, often due to overly complex queries or, more commonly, outdated table statistics. Ensure automated ANALYZE operations are running effectively.</li>
+                    </ul>`,
+                    chartType: 'bar',
+                    chartData: {
+                        labels: ['Query 1', 'Query 2', 'Query 3', 'Query 4', 'Query 5'],
+                        datasets: [
+                            { label: 'Planning (ms)', data: [100, 120, 80, 150, 90], backgroundColor: '#fbc02d' }, /* Yellow */
+                            { label: 'Queue (ms)', data: [200, 150, 300, 100, 250], backgroundColor: '#e53935' }, /* Red */
+                            { label: 'Lock Wait (ms)', data: [50, 20, 10, 30, 60], backgroundColor: '#00c853' }, /* Green */
+                            { label: 'Execution (ms)', data: [850, 1200, 950, 1100, 1000], backgroundColor: '#2196f3' }  /* Blue */
+                        ]
+                    },
+                    chartOptions: { scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Time (ms)', font: { size: 14, weight: 'bold' } } } } },
+                    expectedCsvCols: ['QueryID', 'PlanningTimeMs', 'QueueTimeMs', 'LockWaitTimeMs', 'ExecutionTimeMs']
+                },
+                {
+                    id: 'query_concurrency',
+                    title: 'Query Concurrency & Queue Length',
+                    description: 'Tracks the number of queries actively running versus those waiting in a queue due to resource saturation. A persistently high queue length is a critical indicator of a resource bottleneck.',
+                    query: `SELECT
+    date_trunc('hour', start_time) AS hour,
+    SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued_queries,
+    SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running_queries
+FROM sys_query_history
+WHERE start_time >= GETDATE() - INTERVAL '24 hours'
+GROUP BY 1
+ORDER BY 1;`,
+                    analysis: `<ul>
+                        <li class="mb-2"><strong>Persistent High Queue:</strong> Suggests the configured Max RPU is too low or that workloads are too bursty for the scaling mechanism to keep up. When queries consistently queue, the system has hit its compute ceiling, degrading performance. Re-evaluate the Max RPU setting.</li>
+                        <li class="mb-2"><strong>Sudden Spikes in Queue:</strong> A sharp, short-lived spike might not be a capacity issue but a single "runaway" query or a transaction lock blocking subsequent queries. Use other KPIs to investigate the specific cause.</li>
+                    </ul>`,
+                    chartType: 'line',
+                    chartData: {
+                        labels: ['-6h', '-5h', '-4h', '-3h', '-2h', '-1h', 'Now'],
+                        datasets: [
+                            { label: 'Running Queries', data: [4, 5, 5, 6, 7, 6, 8], borderColor: '#1a73e8', backgroundColor: 'rgba(26, 115, 232, 0.2)', fill: true, tension: 0.3 }, /* Google Blue */
+                            { label: 'Queued Queries', data: [0, 0, 1, 2, 5, 2, 1], borderColor: '#d93025', backgroundColor: 'rgba(217, 48, 37, 0.2)', fill: true, tension: 0.3 } /* Google Red */
+                        ]
+                    },
+                    chartOptions: { scales: { y: { beginAtZero: true, title: { display: true, text: 'Number of Queries', font: { size: 14, weight: 'bold' } } } } },
+                    expectedCsvCols: ['Hour', 'QueuedQueries', 'RunningQueries']
+                },
+                {
+                    id: 'query_error_rate',
+                    title: 'Query Error Rate',
+                    description: 'Represents the percentage of SQL queries that fail or are canceled. Common reasons for such failures include exceeding predefined usage quotas, hitting statement timeout limits, or encountering underlying network connectivity issues.',
+                    query: `SELECT
+    error_message,
+    COUNT(*) AS error_count,
+    CAST(COUNT(*) AS DECIMAL) * 100.0 / SUM(COUNT(*)) OVER () AS percentage
+FROM sys_query_history
+WHERE status = 'aborted'
+AND start_time >= GETDATE() - INTERVAL '24 hours'
+GROUP BY error_message
+ORDER BY error_count DESC;`,
+                    analysis: `<ul>
+                        <li class="mb-2"><strong>"Usage Limit Reached" Errors:</strong> Directly indicates that pre-defined cost control boundaries (RPU limits or quotas) are being hit. This means cost controls are impacting operations. Re-evaluate limits or optimize the underlying workloads.</li>
+                        <li class="mb-2"><strong>"Statement Timeout" Errors:</strong> Signifies that individual queries are too slow and being terminated. This points to inefficient query logic (e.g., full table scans, bad joins) rather than an overall capacity problem. Focus on tuning the specific queries.</li>
+                    </ul>`,
+                    chartType: 'doughnut',
+                    chartData: {
+                        labels: ['Usage Limit Reached', 'Statement Timeout', 'Syntax Error', 'Permission Denied', 'Other'],
+                        datasets: [{
+                            data: [45, 30, 15, 5, 5],
+                            backgroundColor: ['#d93025', '#f97316', '#fbbc05', '#34a853', '#607d8b'] /* Google palette */
+                        }]
+                    },
+                    chartOptions: {},
+                    expectedCsvCols: ['ErrorMessage', 'ErrorCount']
+                },
+                {
+                    id: 'rpu_utilization',
+                    title: 'RPU Utilization & Scaling',
+                    description: 'Measures the consumption of Redshift Processing Units (RPUs) over time. This KPI is directly linked to both performance and cost, showing how the system scales in response to demand.',
+                    query: `SELECT
+    date_trunc('day', start_time) AS day,
+    SUM(charged_seconds)/3600.0 AS total_rpu_hours,
+    (SUM(charged_seconds)/3600.0) * 0.36 AS daily_cost, -- Replace 0.36 with your region's RPU price for US-WEST-3
+    MIN(compute_capacity) AS min_rpu,
+    MAX(compute_capacity) AS max_rpu,
+    AVG(compute_capacity) AS avg_rpu
+FROM sys_serverless_usage
+WHERE start_time >= GETDATE() - INTERVAL '7 days'
+GROUP BY 1
+ORDER BY 1;`,
+                    analysis: `<ul>
+                        <li class="mb-2"><strong>Consistently High Avg RPU:</strong> If avg_rpu is near max_rpu and queries are queuing, the system is resource-constrained. The Max RPU setting is likely too low to handle the workload, capping the AI-driven scaling. Increase Max RPU to improve performance, but be mindful of cost implications.</li>
+                        <li class="mb-2"><strong>Flat RPU Usage:</strong> If RPU usage is flat despite variable workloads, the AI-driven scaling profile may be too heavily skewed towards cost savings, sacrificing performance. Adjust the profile towards a "Balanced" or "Performance-Optimized" setting.</li>
+                    </ul>`,
+                    chartType: 'bar',
+                    chartData: {
+                        labels: ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Day 7'],
+                        datasets: [
+                            { type: 'bar', label: 'Avg RPU', data: [64, 72, 88, 96, 112, 128, 96], backgroundColor: '#1a73e8' }, /* Blue */
+                            { type: 'line', label: 'Max RPU Hit', data: [96, 96, 128, 128, 128, 128, 128], borderColor: '#d93025', fill: false, borderWidth: 3 } /* Red */
+                        ]
+                    },
+                    chartOptions: { scales: { y: { beginAtZero: true, title: { display: true, text: 'RPU Count', font: { size: 14, weight: 'bold' } } } } },
+                    expectedCsvCols: ['Day', 'AvgRPU', 'MaxRPU']
+                },
+                {
+                    id: 'data_scanned',
+                    title: 'Data Scanned/Processed (I/O)',
+                    description: 'Measures the volume of data that queries read from storage. High data scan volumes often indicate inefficient queries (e.g., lack of filtering) or suboptimal table design, leading to higher costs and slower performance.',
+                    query: `SELECT
+    q.query_id,
+    SUBSTRING(q.query_text, 1, 50) as query_snippet,
+    SUM(d.input_bytes) AS total_input_bytes
+FROM sys_query_history q
+JOIN sys_query_detail d ON q.query_id = d.query_id
+WHERE q.start_time >= GETDATE() - INTERVAL '24 hours'
+GROUP BY 1, 2
+ORDER BY total_input_bytes DESC
+LIMIT 10;`,
+                    analysis: `<ul>
+                        <li class="mb-2"><strong>High Input, Low Output:</strong> If a query reads a lot of data (high input_bytes) but produces few result rows, it's a classic sign of inefficient filtering. The query is scanning and discarding massive amounts of data. Optimize by applying WHERE clauses that leverage sort keys.</li>
+                        <li class="mb-2"><strong>High Intermediate Output:</strong> If a single step in a query plan generates a massive intermediate result, it often precedes a disk spill. This is typically caused by inefficient joins (e.g., Cartesian products). Review the EXPLAIN plan and optimize join conditions.</li>
+                    </ul>`,
+                    chartType: 'bar',
+                    chartData: {
+                        labels: ['Query 4815', 'Query 1623', 'Query 4299', 'Query 8128', 'Query 5110'],
+                        datasets: [{
+                            label: 'Total Input (GB)',
+                            data: [512, 450, 380, 320, 280],
+                            backgroundColor: '#3f51b5' /* Indigo */
+                        }]
+                    },
+                    chartOptions: { indexAxis: 'y', scales: { x: { beginAtZero: true, title: { display: true, text: 'Data Scanned (GB)', font: { size: 14, weight: 'bold' } } } } },
+                    expectedCsvCols: ['QuerySnippet', 'TotalInputGB']
+                },
+                {
+                    id: 'disk_spills',
+                    title: 'Disk Spill Events',
+                    description: 'A disk spill occurs when intermediate query results, generated during operations like sorting or hashing, exceed the available memory allocated to the query and are consequently written to temporary disk space. This process significantly slows down query execution. The `is_diskbased` flag in `SYS_QUERY_DETAIL` indicates if a query step was performed as a disk-based operation.',
+                    query: `SELECT
+    q.query_id,
+    q.query_text,
+    d.table_name,
+    d.step_name,
+    d.input_bytes AS step_input_bytes,
+    d.output_bytes AS step_output_bytes,
+    d.is_diskbased
+FROM sys_query_history q
+JOIN sys_query_detail d ON q.query_id = d.query_id
+WHERE d.is_diskbased = 't'
+AND q.start_time >= GETDATE() - INTERVAL '24 hours'
+ORDER BY d.input_bytes DESC
+LIMIT 10;`,
+                    analysis: `<ul>
+                        <li class="mb-2"><strong>Recurring Spills:</strong> If the same queries consistently spill to disk, it is not a random occurrence but a predictable outcome of how the query interacts with the data and the allocated memory resources. This suggests a systemic issue with the query's design or the underlying table structure. The query plan is likely too memory-intensive for the current RPU configuration, or the query itself is inherently inefficient, perhaps due to large sort operations on unsorted data, or complex joins that generate massive intermediate results. The immediate response of simply increasing RPUs might offer temporary relief, but a more sustainable solution involves thorough query tuning. This includes optimizing <code>GROUP BY</code> and <code>ORDER BY</code> clauses, ensuring appropriate sort keys are utilized, filtering data effectively before joins, and potentially re-evaluating table distribution styles to minimize data movement.</li>
+                        <li class="mb-2"><strong>Spills During COPY:</strong> If COPY operations result in disk spills, particularly during sorting steps, it points to inefficiencies in the data loading practices. This often occurs if the incoming data is not loaded in sort key order, or if overly large source files are being processed. This indicates a bottleneck within the ETL or data ingestion pipeline rather than a query execution problem. The implication is that the data ingestion strategy needs optimization. This could involve pre-sorting data in the source S3 buckets, breaking down very large source files into smaller, more manageable chunks, or, for UPSERT operations, utilizing <code>COMPUPDATE OFF</code> and <code>STATUPDATE OFF</code> in the <code>COPY</code> command if appropriate to prevent unnecessary overhead.</li>
+                    </ul>`,
+                    chartType: 'table',
+                    tableData: {
+                        headers: ['Query ID', 'Query Snippet', 'Step Name', 'Input Bytes', 'Output Bytes', 'Disk Based'],
+                        rows: [
+                            [8128, 'SELECT ... FROM sales JOIN calendar ...', 'Hash Join', '120MB', '60MB', 'true'],
+                            [4815, 'SELECT ... FROM logs ORDER BY event_time ...', 'Sort', '200MB', '200MB', 'true'],
+                            [8129, 'SELECT ... FROM sales JOIN calendar ...', 'Hash Join', '90MB', '45MB', 'true'],
+                            [5110, 'SELECT DISTINCT ... FROM user_sessions ...', 'HashAggregate', '150MB', '10MB', 'true'],
+                        ]
+                    },
+                    expectedCsvCols: ['QueryID', 'QuerySnippet', 'StepName', 'InputBytes', 'OutputBytes', 'DiskBased']
+                },
+                {
+                    id: 'data_skew',
+                    title: 'Data Skew & Unsorted Rows',
+                    description: 'Data skew describes the uneven distribution of data across the compute nodes within the Redshift Serverless workgroup. This imbalance can cause some nodes to process significantly more data than others, leading to performance bottlenecks. Unsorted Rows refers to data that is not physically ordered according to the table\'s defined sort keys, even if a sort key is specified.',
+                    query: `SELECT
+    "table",
+    encoded,
+    diststyle,
+    sortkey1,
+    skew_sortkey1, -- Skew on the primary sort key
+    skew_rows,     -- Overall row distribution skew
+    unsorted,      -- Percentage of unsorted rows
+    stats_off      -- Stale statistics (relevant for query planning)
+FROM svv_table_info
+WHERE skew_rows > 1.5 OR unsorted > 10.0 OR stats_off > 50.0
+ORDER BY skew_rows DESC, unsorted DESC, stats_off DESC;`,
+                    analysis: `<ul>
+                        <li class="mb-2"><strong>High Skew:</strong> When data is unevenly distributed, one or a few compute nodes become "hot spots," disproportionately processing a large volume of data. This leads to a performance bottleneck where the overall query completion time is dictated by the slowest node. If a query performs joins or aggregations on a highly skewed distribution key, it necessitates massive data redistribution across nodes, causing significant performance degradation and potentially leading to disk spills. The underlying issue is often a suboptimal table <code>DISTSTYLE</code> or <code>DISTKEY</code> choice. This situation requires a re-evaluation of the table's distribution strategy, potentially necessitating a table redesign or considering the use of <code>ALL</code> distribution for smaller dimension tables that are frequently joined with large fact tables.</li>
+                        <li class="mb-2"><strong>High Unsorted %:</strong> Amazon Redshift's columnar storage and zone maps are highly optimized for data that is physically sorted according to defined sort keys. If data is unsorted, the query optimizer cannot effectively leverage these mechanisms to skip irrelevant data blocks, forcing it to scan more data than necessary. This directly increases I/O operations and prolongs <code>execution_time</code>. While Redshift Serverless includes automated <code>VACUUM</code> operations, a consistently high <code>unsorted</code> value suggests that the automated process might not be keeping pace with the rate of data changes, or that the initial sort key design is not optimal for the current data ingestion patterns. This indicates a need to review the <code>VACUUM</code> strategy, potentially scheduling manual <code>VACUUM</code> operations during off-peak hours, or re-evaluating the table design to ensure data is sorted more frequently and effectively.</li>
+                    </ul>`,
+                     chartType: 'table',
+                    tableData: {
+                        headers: ['Table Name', 'Row Skew Ratio', 'Unsorted %', 'Stats Off %'],
+                        rows: [
+                            ['public.sales', '4.8', '5.2%', '1.0%'],
+                            ['public.event_logs', '1.2', '75.6%', '25.0%'],
+                            ['public.users', '2.1', '1.1%', '5.5%'],
+                            ['public.page_views', '1.1', '45.0%', '60.1%'],
+                        ]
+                    },
+                    expectedCsvCols: ['TableName', 'RowSkewRatio', 'UnsortedPercent', 'StatsOffPercent']
+                },
+                 {
+                    id: 'stale_stats',
+                    title: 'Missing/Stale Statistics',
+                    description: 'The query optimizer relies on accurate table statistics to generate efficient execution plans. Outdated or missing statistics can lead to poor plan choices and severely degraded performance.',
+                    query: `SELECT
+    "table",
+    stats_off
+FROM svv_table_info
+WHERE stats_off > 50.0
+ORDER BY stats_off DESC;`,
+                    analysis: `<ul>
+                        <li class="mb-2"><strong>High Stats Off %:</strong> When statistics are stale (high <code>stats_off</code>), the optimizer makes bad assumptions about data distribution and cardinality, leading to poor choices for join orders and access paths. This results in longer planning and execution times. While Redshift has an auto-ANALYZE feature, high values here indicate it may not be keeping up, and manual ANALYZE operations may be needed for critical tables.</li>
+                    </ul>`,
+                    chartType: 'bar',
+                    chartData: {
+                        labels: ['page_views', 'click_stream', 'product_reviews', 'user_feedback'],
+                        datasets: [{
+                            label: 'Statistics Off (%)',
+                            data: [85, 72, 65, 51],
+                            backgroundColor: '#f9a825' /* Amber */
+                        }]
+                    },
+                    chartOptions: { indexAxis: 'y', scales: { x: { beginAtZero: true, title: { display: true, text: 'Staleness (%)', font: { size: 14, weight: 'bold' } } } } },
+                    expectedCsvCols: ['TableName', 'StatsOffPercent']
+                },
+                {
+                    id: 'load_performance',
+                    title: 'Load/Unload Performance',
+                    description: 'Measures the efficiency of data ingestion (COPY) and data extraction (UNLOAD) operations. Efficient data pipelines are critical for data freshness and timely downstream analytics.',
+                    query: `SELECT
+    date_trunc('day', start_time) AS exec_day,
+    SUM(loaded_rows) AS total_loaded_rows,
+    SUM(loaded_bytes) AS total_loaded_bytes
+FROM sys_load_history
+GROUP BY exec_day
+ORDER BY exec_day DESC;`,
+                    analysis: `<ul>
+                        <li class="mb-2"><strong>Slow COPY Duration/High Errors:</strong> Can be caused by external factors (S3 connectivity, IAM permissions) or inefficient command parameters (not using multiple files, not loading in sort key order). Check SYS_LOAD_ERROR_DETAIL for specifics and review data loading best practices.</li>
+                        <li class="mb-2"><strong>Slow UNLOAD Duration:</strong> For large datasets, this may indicate issues with the destination S3 bucket or not leveraging parallel unloading. Ensure the UNLOAD command is configured for parallel execution.</li>
+                    </ul>`,
+                    chartType: 'line',
+                    chartData: {
+                        labels: ['-6d', '-5d', '-4d', '-3d', '-2d', '-1d', 'Today'],
+                        datasets: [{
+                            label: 'Rows Loaded (Millions)',
+                            data: [120, 135, 110, 150, 180, 165, 190],
+                            borderColor: '#00b0ff', /* Light Blue Accent */
+                            backgroundColor: 'rgba(0, 176, 255, 0.2)',
+                            fill: true,
+                            tension: 0.3
+                        }]
+                    },
+                    chartOptions: { scales: { y: { beginAtZero: true, title: { display: true, text: 'Rows (Millions)', font: { size: 14, weight: 'bold' } } } } },
+                    expectedCsvCols: ['Date', 'RowsLoadedMillions']
+                },
+                {
+                    id: 'cost_trends',
+                    title: 'Cost & Usage Trends',
+                    description: 'Monitors the financial impact of Redshift Serverless usage by tracking the consumption of RPU-hours and translating these into estimated costs. This KPI provides a clear financial overview of the data warehouse operations.',
+                    query: `SELECT
+    date_trunc('day', start_time) AS day,
+    (SUM(charged_seconds)/3600.0) * <AWS_REGION_PRICE> AS daily_cost_incurred, -- Replace 0.36 with your region's RPU price for US-WEST-3
+    MIN(compute_capacity) AS min_rpu,
+    MAX(compute_capacity) AS max_rpu,
+    AVG(compute_capacity) AS avg_rpu
+FROM sys_serverless_usage
+WHERE start_time >= GETDATE() - INTERVAL '30 days' -- Extend history for trend analysis
+GROUP BY 1
+ORDER BY 1;`,
+                    analysis: `<ul>
+                        <li class="mb-2"><strong>Unexpected Cost Spikes:</strong> If costs surge without a corresponding increase in business activity, it signals inefficient resource consumption. This could be driven by a few unoptimized, expensive queries or overhead from "cold starts" for infrequent workloads. Scrutinize cost drivers beyond just total RPU-hours.</li>
+                        <li class="mb-2"><strong>High Base Cost:</strong> If the base RPU (min_rpu) is high relative to the average for a spiky workload, you are paying for idle capacity, which diminishes the "pay-per-use" benefit. Fine-tune the base RPU and Max RPU settings to align more closely with actual workload patterns and ensure the AI-driven scaling profile is configured to prioritize cost savings if that aligns with the workload's criticality and performance requirements.</li>
+                    </ul>`,
+                     chartType: 'line',
+                    chartData: {
+                        labels: ['Week 4', 'Week 3', 'Week 2', 'Last Week'],
+                        datasets: [{
+                            label: 'Estimated Daily Cost ($)',
+                            data: [15, 20, 18, 27.5],
+                            borderColor: '#388e3c', /* Dark Green */
+                            backgroundColor: 'rgba(56, 142, 60, 0.2)',
+                            fill: true,
+                            tension: 0.3
+                        }]
+                    },
+                    chartOptions: { scales: { y: { beginAtZero: true, title: { display: true, text: 'Cost (USD)', font: { size: 14, weight: 'bold' } } } } },
+                    expectedCsvCols: ['Date', 'EstimatedDailyCost']
+                }
+            ],
+            optimizationStrategies: [
+                { 
+                    title: 'Query Optimization Best Practices', 
+                    points: [
+                        '<strong>Avoid <code class="font-mono text-xs text-gray-700">SELECT *</code></strong>: Only select the columns you need to reduce I/O and data processing.',
+                        '<strong>Filter Early with <code class="font-mono text-xs text-gray-700">WHERE</code> Clauses</strong>: Apply predicates as early as possible to minimize the dataset size before complex operations like joins or aggregations.',
+                        '<strong>Use Materialized Views (MVs)</strong>: Pre-compute and store results of complex, recurring queries to dramatically speed up analytical dashboards and reports.'
+                    ]
+                },
+                { 
+                    title: 'Table Design Principles', 
+                    points: [
+                        '<strong>Choose Optimal Sort Keys</strong>: Base sort keys on columns frequently used in <code class="font-mono text-xs text-gray-700">WHERE</code> clauses or <code class="font-mono text-xs text-gray-700">JOIN</code> conditions to improve data pruning and query performance.',
+                        '<strong>Select Effective Distribution Styles</strong>: Use <code class="font-mono text-xs text-gray-700">KEY</code> distribution on common join columns, <code class="font-mono text-xs text-gray-700">ALL</code> for smaller dimensions, or <code class="font-mono text-xs text-gray-700">EVEN</code> as a default.',
+                        '<strong>Use Smallest Possible Column Sizes</strong>: Appropriate data types and column sizes minimize storage and memory consumption during query processing.'
+                    ]
+                },
+                {
+                    title: 'Workload & Cost Management',
+                    points: [
+                        '<strong>Leverage AI-Driven Scaling Profiles</strong>: Adjust the price-performance slider in Redshift Serverless settings to match the workload\'s priority (e.g., "Optimized for Performance").',
+                        '<strong>Set RPU Limits (Base & Max)</strong>: Define both a <code class="font-mono text-xs text-gray-700">Base RPU</code> (minimum capacity) and a <code class="font-mono text-xs text-gray-700">Max RPU</code> (peak capacity) to control costs and ensure predictable performance.',
+                        '<strong>Use Query Monitoring Rules (QMRs)</strong>: Configure QMRs to set performance boundaries for queries and define automated actions (e.g., log, abort) for runaway queries.'
+                    ]
+                },
+                 {
+                    title: 'Data Loading & Maintenance',
+                    points: [
+                        '<strong>Efficient <code class="font-mono text-xs text-gray-700">COPY</code> Commands</strong>: Use multiple small data files (1MB-1GB per compressed file) for bulk loading to maximize parallelism during ingestion.',
+                        '<strong>Regular <code class="font-mono text-xs text-gray-700">VACUUM</code> and <code class="font-mono text-xs text-gray-700">ANALYZE</code> Operations</strong>: Monitor <code class="font-mono text-xs text-gray-700">unsorted</code> and <code class="font-mono text-xs text-gray-700">stats_off</code> metrics in <code class="font-mono text-xs text-gray-700">SVV_TABLE_INFO</code>; intervene manually if automated processes are insufficient.',
+                        '<strong>Implement Change Data Capture (CDC)</strong>: Load only new or modified data to significantly reduce load times and processing overhead.'
+                    ]
+                }
+            ],
+            referenceViews: [
+                { name: '`SYS_SERVERLESS_USAGE`', purpose: 'Monitor RPU consumption and cost.' },
+                { name: '`SYS_QUERY_HISTORY`', purpose: 'Comprehensive query performance overview.' },
+                { name: '`SYS_QUERY_DETAIL`', purpose: 'Granular, step-level query execution analysis.' },
+                { name: '`SVV_TABLE_INFO`', purpose: 'Table design and health diagnostics (skew, unsorted, stats).' },
+                { name: '`SYS_LOAD_HISTORY`', purpose: 'Monitor data ingestion performance from `COPY` commands.' },
+                { name: '`SYS_ANALYZE_HISTORY`', purpose: 'Track `ANALYZE` operations and statistics updates.' },
+                { name: '`SYS_VACUUM_HISTORY`', purpose: 'Track `VACUUM` operations and data hygiene.' },
+                { name: '`SYS_CONNECTION_LOG`', purpose: 'Monitor database connection events.' },
+                { name: '`SYS_SESSION_HISTORY`', purpose: 'Monitor active and historical user sessions.' },
+                { name: '`SVV_TRANSACTIONS`', purpose: 'Identify locking and blocking transactions.' }
+            ]
+        };
+
+        let currentChart = null;
+        let dashboardChartInstance = null;
+        let currentKpiId = null; // Track currently selected KPI
+
+        function copyCode(button) {
+            const codeElement = button.nextElementSibling.querySelector('code');
+            const textToCopy = codeElement.innerText;
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = textToCopy;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextArea);
+            
+            button.innerText = 'Copied!';
+            setTimeout(() => {
+                button.innerText = 'Copy';
+            }, 2000);
+        }
+
+        function parseCsvData(csvString) {
+            const lines = csvString.trim().split('\n');
+            const headers = lines[0].split(',').map(h => h.trim());
+            const data = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',').map(v => v.trim());
+                if (values.length === headers.length) {
+                    const row = {};
+                    headers.forEach((header, index) => {
+                        row[header] = values[index];
+                    });
+                    data.push(row);
+                }
+            }
+            return data;
+        }
+
+        function updateDashboardChartWithCsv(csvData) {
+            const dates = [];
+            const avgRpuData = [];
+            const estCostData = [];
+
+            csvData.forEach(row => {
+                dates.push(row.Date);
+                avgRpuData.push(parseFloat(row.AvgRPU));
+                estCostData.push(parseFloat(row.EstCost));
+            });
+
+            if (dashboardChartInstance) {
+                dashboardChartInstance.data.labels = dates;
+                dashboardChartInstance.data.datasets[0].data = avgRpuData;
+                dashboardChartInstance.data.datasets[1].data = estCostData;
+                dashboardChartInstance.update();
+            }
+             document.getElementById('dashboardUploadStatus').textContent = 'CSV data loaded successfully!';
+             document.getElementById('dashboardUploadStatus').classList.remove('text-red-600');
+             document.getElementById('dashboardUploadStatus').classList.add('text-green-600');
+        }
+
+        function updateKpiChartWithCsv(kpiId, csvData) {
+            const kpiData = appData.kpis.find(k => k.id === kpiId);
+            if (!kpiData) return;
+
+            const uploadStatus = document.getElementById('kpiUploadStatus');
+            uploadStatus.textContent = ''; // Clear previous status
+
+            // Validate CSV headers for the specific KPI
+            const actualHeaders = Object.keys(csvData[0] || {});
+            const expectedHeaders = kpiData.expectedCsvCols;
+
+            const missingHeaders = expectedHeaders.filter(header => !actualHeaders.includes(header));
+            if (missingHeaders.length > 0) {
+                uploadStatus.textContent = `Error: Missing expected columns: ${missingHeaders.join(', ')}.`;
+                uploadStatus.classList.remove('text-green-600');
+                uploadStatus.classList.add('text-red-600');
+                return;
+            }
+
+            if (kpiData.chartType === 'table') {
+                // For table-based KPIs, directly update the tableData
+                kpiData.tableData.headers = actualHeaders;
+                kpiData.tableData.rows = csvData.map(row => expectedHeaders.map(header => row[header]));
+                createOrUpdateKpiChart(kpiId); // Re-render the table
+                uploadStatus.textContent = 'CSV data loaded successfully for table!';
+                uploadStatus.classList.remove('text-red-600');
+                uploadStatus.classList.add('text-green-600');
+            } else {
+                // For chart-based KPIs
+                if (currentChart) {
+                    currentChart.destroy();
+                }
+
+                const ctx = document.getElementById('kpi-chart').getContext('2d');
+                let newChartData = JSON.parse(JSON.stringify(kpiData.chartData)); // Deep copy
+
+                if (kpiId === 'query_execution_time') {
+                    newChartData.labels = csvData.map(row => row.QueryID);
+                    newChartData.datasets = [
+                        { label: 'Planning (ms)', data: csvData.map(row => parseFloat(row.PlanningTimeMs)), backgroundColor: '#fbc02d' },
+                        { label: 'Queue (ms)', data: csvData.map(row => parseFloat(row.QueueTimeMs)), backgroundColor: '#e53935' },
+                        { label: 'Lock Wait (ms)', data: csvData.map(row => parseFloat(row.LockWaitTimeMs)), backgroundColor: '#00c853' },
+                        { label: 'Execution (ms)', data: csvData.map(row => parseFloat(row.ExecutionTimeMs)), backgroundColor: '#2196f3' }
+                    ];
+                } else if (kpiId === 'query_concurrency') {
+                    newChartData.labels = csvData.map(row => row.Hour);
+                    newChartData.datasets = [
+                        { label: 'Running Queries', data: csvData.map(row => parseFloat(row.RunningQueries)), borderColor: '#1a73e8', backgroundColor: 'rgba(26, 115, 232, 0.2)', fill: true, tension: 0.3 },
+                        { label: 'Queued Queries', data: csvData.map(row => parseFloat(row.QueuedQueries)), borderColor: '#d93025', backgroundColor: 'rgba(217, 48, 37, 0.2)', fill: true, tension: 0.3 }
+                    ];
+                } else if (kpiId === 'query_error_rate') {
+                    newChartData.labels = csvData.map(row => row.ErrorMessage);
+                    newChartData.datasets[0].data = csvData.map(row => parseFloat(row.ErrorCount));
+                    newChartData.datasets[0].backgroundColor = ['#d93025', '#f97316', '#fbbc05', '#34a853', '#607d8b'];
+                } else if (kpiId === 'rpu_utilization') {
+                    newChartData.labels = csvData.map(row => row.Day);
+                    newChartData.datasets = [
+                        { type: 'bar', label: 'Avg RPU', data: csvData.map(row => parseFloat(row.AvgRPU)), backgroundColor: '#1a73e8' },
+                        { type: 'line', label: 'Max RPU Hit', data: csvData.map(row => parseFloat(row.MaxRPU)), borderColor: '#d93025', fill: false, borderWidth: 3 }
+                    ];
+                } else if (kpiId === 'data_scanned') {
+                    newChartData.labels = csvData.map(row => row.QuerySnippet);
+                    newChartData.datasets[0].data = csvData.map(row => parseFloat(row.TotalInputGB));
+                    newChartData.datasets[0].backgroundColor = '#3f51b5';
+                } else if (kpiId === 'stale_stats') {
+                    newChartData.labels = csvData.map(row => row.TableName);
+                    newChartData.datasets[0].data = csvData.map(row => parseFloat(row.StatsOffPercent));
+                    newChartData.datasets[0].backgroundColor = '#f9a825';
+                } else if (kpiId === 'load_performance') {
+                    newChartData.labels = csvData.map(row => row.Date);
+                    newChartData.datasets[0].data = csvData.map(row => parseFloat(row.RowsLoadedMillions));
+                    newChartData.datasets[0].borderColor = '#00b0ff';
+                    newChartData.datasets[0].backgroundColor = 'rgba(0, 176, 255, 0.2)';
+                } else if (kpiId === 'cost_trends') {
+                    newChartData.labels = csvData.map(row => row.Date);
+                    newChartData.datasets[0].data = csvData.map(row => parseFloat(row.EstimatedDailyCost));
+                    newChartData.datasets[0].borderColor = '#388e3c';
+                    newChartData.datasets[0].backgroundColor = 'rgba(56, 142, 60, 0.2)';
+                }
+                
+                currentChart = new Chart(ctx, {
+                    type: kpiData.chartType,
+                    data: newChartData,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'top', labels: { font: { size: 14 } } },
+                            tooltip: { mode: 'index', intersect: false }
+                        },
+                        ...kpiData.chartOptions
+                    }
+                });
+                uploadStatus.textContent = 'CSV data loaded successfully for chart!';
+                uploadStatus.classList.remove('text-red-600');
+                uploadStatus.classList.add('text-green-600');
+            }
+        }
+
+        function createOrUpdateKpiChart(kpiId) {
+            const kpiData = appData.kpis.find(k => k.id === kpiId);
+            if (!kpiData) return;
+
+            const chartWrapper = document.getElementById('kpi-chart-container-wrapper');
+            const tableContainer = document.getElementById('kpi-table-container');
+
+            if (currentChart) {
+                currentChart.destroy();
+            }
+
+            if(kpiData.chartType === 'table') {
+                chartWrapper.classList.add('hidden');
+                tableContainer.classList.remove('hidden');
+                
+                let tableHTML = `<table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-blue-50">
+                        <tr>`;
+                kpiData.tableData.headers.forEach(header => {
+                    tableHTML += `<th scope="col" class="px-6 py-4 text-left text-sm font-bold text-blue-800 uppercase tracking-wider">${header}</th>`;
+                });
+                tableHTML += `</tr></thead>
+                    <tbody class="bg-white divide-y divide-gray-200">`;
+                kpiData.tableData.rows.forEach(row => {
+                    tableHTML += `<tr>`;
+                    row.forEach(cell => {
+                         let displayValue = cell;
+                         if (cell === 'true') {
+                             displayValue = '✅'; // Unicode checkmark
+                         } else if (cell === 'false') {
+                             displayValue = '❌'; // Unicode cross
+                         }
+                         tableHTML += `<td class="px-6 py-4 whitespace-nowrap text-base text-gray-700">${displayValue}</td>`;
+                    });
+                    tableHTML += `</tr>`;
+                });
+                tableHTML += `</tbody></table>`;
+                tableContainer.innerHTML = tableHTML;
+            } else {
+                chartWrapper.classList.remove('hidden'); /* Show chart wrapper */
+                tableContainer.classList.add('hidden');
+
+                const ctx = document.getElementById('kpi-chart').getContext('2d');
+                const chartConfig = {
+                    type: kpiData.chartType,
+                    data: kpiData.chartData,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: {
+                                    font: { size: 14 }
+                                }
+                            },
+                            tooltip: { mode: 'index', intersect: false }
+                        },
+                        scales: {
+                            x: {
+                                grid: { color: 'rgba(203, 213, 224, 0.3)' }
+                            },
+                            y: {
+                                grid: { color: 'rgba(203, 213, 224, 0.3)' }
+                            }
+                        },
+                        ...kpiData.chartOptions
+                    }
+                };
+                currentChart = new Chart(ctx, chartConfig);
+            }
+        }
+
+        function displayKpiDetails(kpiId) {
+            currentKpiId = kpiId; // Set current KPI ID
+            const kpiData = appData.kpis.find(k => k.id === kpiId);
+            if (!kpiData) return;
+
+            document.getElementById('kpi-placeholder').classList.add('hidden');
+            document.getElementById('kpi-detail-content').classList.remove('hidden');
+
+            document.getElementById('kpi-title').textContent = kpiData.title;
+            document.getElementById('kpi-description').textContent = kpiData.description;
+            document.getElementById('kpi-query').textContent = kpiData.query;
+            document.getElementById('kpi-analysis').innerHTML = kpiData.analysis;
+            
+            const expectedColsText = kpiData.expectedCsvCols.map(col => `<code class="font-mono text-sm text-blue-700">${col}</code>`).join(', ');
+            document.getElementById('kpiUploadInstruction').innerHTML = `Upload CSV for this KPI. Expected columns: ${expectedColsText}`;
+            document.getElementById('kpiUploadStatus').textContent = ''; // Clear status
+
+            createOrUpdateKpiChart(kpiId);
+
+            document.querySelectorAll('#kpi-list li').forEach(li => {
+                li.classList.remove('kpi-active');
+                if (li.dataset.kpi === kpiId) {
+                    li.classList.add('kpi-active');
+                }
+            });
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('nav-active');
+                btn.classList.add('nav-inactive');
+                if (btn.dataset.tab === tabId) {
+                    btn.classList.remove('nav-inactive');
+                    btn.classList.add('nav-active');
+                }
+            });
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            const navButtons = document.querySelectorAll('.nav-btn');
+            navButtons.forEach(button => {
+                button.addEventListener('click', () => switchTab(button.dataset.tab));
+            });
+
+            const kpiList = document.getElementById('kpi-list');
+            appData.kpis.forEach(kpi => {
+                const li = document.createElement('li');
+                li.dataset.kpi = kpi.id;
+                li.className = 'kpi-list-item';
+                li.textContent = kpi.title;
+                li.addEventListener('click', () => displayKpiDetails(kpi.id));
+                kpiList.appendChild(li);
+            });
+            
+            const optimizationContent = document.getElementById('optimization-content');
+            appData.optimizationStrategies.forEach(strategy => {
+                const details = document.createElement('details');
+                details.className = "card p-5 border border-blue-100 rounded-xl"; /* Slightly adjusted padding for details */
+                const summary = document.createElement('summary');
+                summary.className = "text-xl font-bold cursor-pointer text-blue-800 hover:text-blue-900 transition-colors duration-200 flex items-center";
+                summary.innerHTML = `<span class="mr-3 text-3xl">💡</span> ${strategy.title} <span class="ml-auto text-2xl chevron">▶️</span>`; /* Added chevron icon */
+                const contentDiv = document.createElement('div');
+                contentDiv.className = "mt-4 pt-4 border-t border-gray-200";
+                const ul = document.createElement('ul');
+                ul.className = 'list-disc list-inside space-y-3 text-gray-700 pl-6 text-lg'; /* Larger list items */
+                strategy.points.forEach(point => {
+                    const li = document.createElement('li');
+                    li.innerHTML = point;
+                    ul.appendChild(li);
+                });
+                contentDiv.appendChild(ul);
+                details.appendChild(summary);
+                details.appendChild(contentDiv);
+                optimizationContent.appendChild(details);
+            });
+
+            const referenceTableBody = document.getElementById('reference-table-body');
+            appData.referenceViews.forEach(view => {
+                const row = document.createElement('tr');
+                row.innerHTML = `<td class="px-6 py-4 whitespace-nowrap text-base font-medium text-gray-900">${view.name}</td>
+                                 <td class="px-6 py-4 whitespace-nowrap text-base text-gray-700">${view.purpose}</td>`;
+                referenceTableBody.appendChild(row);
+            });
+            
+            const dashboardCtx = document.getElementById('dashboardChart').getContext('2d');
+            dashboardChartInstance = new Chart(dashboardCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Today'],
+                    datasets: [
+                        {
+                            type: 'bar',
+                            label: 'Avg RPU',
+                            data: [64, 72, 88, 96, 112, 128, 96],
+                            backgroundColor: '#1a73e8', /* Google Blue */
+                            yAxisID: 'y'
+                        },
+                        {
+                            type: 'line',
+                            label: 'Est. Cost ($)',
+                            data: [18, 20.5, 25, 27.5, 32, 36.5, 27.5],
+                            borderColor: '#34a853', /* Google Green */
+                            backgroundColor: 'rgba(52, 168, 83, 0.2)',
+                            fill: true,
+                            tension: 0.3,
+                            yAxisID: 'y1',
+                            pointBackgroundColor: '#34a853',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2,
+                            pointRadius: 5,
+                            pointHoverRadius: 7
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: { font: { size: 14 } }
+                        },
+                        tooltip: { 
+                            mode: 'index', 
+                            intersect: false, 
+                            bodyFont: { size: 14 }, 
+                            titleFont: { size: 16, weight: 'bold' },
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        if (context.dataset.label === 'Est. Cost ($)') {
+                                            label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
+                                        } else {
+                                            label += context.parsed.y;
+                                        }
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(203, 213, 224, 0.3)' },
+                            ticks: { font: { size: 12 } }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'Avg RPU',
+                                font: { size: 14, weight: 'bold' }
+                            },
+                            grid: { color: 'rgba(203, 213, 224, 0.3)' },
+                            ticks: { font: { size: 12 } }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: 'Est. Cost ($)',
+                                font: { size: 14, weight: 'bold' }
+                            },
+                            grid: { drawOnChartArea: false },
+                            ticks: { 
+                                font: { size: 12 },
+                                callback: function(value, index, values) {
+                                    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+                                }
+                            }
+                        },
+                    }
+                }
+            });
+
+            const dashboardCsvFileInput = document.getElementById('dashboardCsvFileInput');
+            dashboardCsvFileInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const csvString = e.target.result;
+                            const parsedData = parseCsvData(csvString);
+                            if (parsedData.length > 0 && parsedData[0].Date && parsedData[0].AvgRPU && parsedData[0].EstCost) {
+                                updateDashboardChartWithCsv(parsedData);
+                            } else {
+                                throw new Error("CSV must contain 'Date', 'AvgRPU', and 'EstCost' columns.");
+                            }
+                        } catch (error) {
+                            console.error("Error processing dashboard CSV:", error);
+                            document.getElementById('dashboardUploadStatus').textContent = `Error: ${error.message}`;
+                            document.getElementById('dashboardUploadStatus').classList.remove('text-green-600');
+                            document.getElementById('dashboardUploadStatus').classList.add('text-red-600');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            });
+
+            const kpiCsvFileInput = document.getElementById('kpiCsvFileInput');
+            kpiCsvFileInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file && currentKpiId) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const csvString = e.target.result;
+                            const parsedData = parseCsvData(csvString);
+                            if (parsedData.length > 0) {
+                                updateKpiChartWithCsv(currentKpiId, parsedData);
+                            } else {
+                                throw new Error("CSV file is empty or malformed.");
+                            }
+                        } catch (error) {
+                            console.error("Error processing KPI CSV:", error);
+                            document.getElementById('kpiUploadStatus').textContent = `Error: ${error.message}`;
+                            document.getElementById('kpiUploadStatus').classList.remove('text-green-600');
+                            document.getElementById('kpiUploadStatus').classList.add('text-red-600');
+                        }
+                    };
+                    reader.readAsText(file);
+                } else if (!currentKpiId) {
+                     document.getElementById('kpiUploadStatus').textContent = 'Please select a KPI first.';
+                     document.getElementById('kpiUploadStatus').classList.remove('text-green-600');
+                     document.getElementById('kpiUploadStatus').classList.add('text-red-600');
+                }
+            });
+            
+            switchTab('dashboard');
+        });
+    </script>
+
+</body>
+</html>
