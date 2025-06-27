@@ -271,17 +271,48 @@
                         <span class="text-green-600 text-4xl mr-3">📈</span> Daily RPU Utilization & Cost Trends
                     </h2>
                     <p class="text-gray-600 mb-6 text-lg">
-                        Upload your daily Redshift Serverless usage data via CSV to dynamically populate this chart. This visualization shows the daily Redshift Processing Units (RPUs) consumed and the estimated cost, allowing you to track trends and correlate resource usage with expenditure over time.
+                        This chart dynamically visualizes your Redshift Processing Units (RPUs) consumption and estimated daily cost over time. Follow the steps below to fetch your actual data and populate this graph for tailored insights.
                     </p>
-                     <label for="dashboardCsvFileInput" class="csv-upload-area mb-10">
-                        <input type="file" id="dashboardCsvFileInput" accept=".csv">
-                        <div class="flex flex-col items-center justify-center py-5">
-                            <span class="text-6xl mb-4 text-blue-400">☁️</span>
-                            <p class="text-blue-800 font-bold text-xl">Drag & Drop or Click to Upload CSV</p>
-                            <p class="text-blue-600 text-sm mt-2">Expected columns: <code class="font-mono text-sm text-blue-700">Date</code>, <code class="font-mono text-sm text-blue-700">AvgRPU</code>, <code class="font-mono text-sm text-blue-700">EstCost</code></p>
-                            <p id="dashboardUploadStatus" class="text-base mt-3 font-semibold"></p>
+                    <div class="flex flex-col lg:flex-row gap-8 mb-10">
+                        <div class="w-full lg:w-1/2">
+                            <h3 class="text-2xl font-semibold mb-4 text-gray-800 flex items-center">
+                                <span class="text-blue-600 text-3xl mr-2">1️⃣</span> Step 1: Get Your Data from Redshift
+                            </h3>
+                            <p class="text-gray-600 mb-4 text-base">
+                                Copy the following query. Execute it in your Redshift Serverless query editor, then download the results as a CSV file.
+                            </p>
+                            <div class="code-block mb-6">
+                                <button class="copy-button" onclick="copyCode(this)">Copy</button>
+                                <pre><code id="dashboard-csv-query">
+SELECT
+    TO_CHAR(date_trunc('day', start_time), 'YYYY-MM-DD') AS Date,
+    AVG(compute_capacity) AS AvgRPU,
+    (SUM(charged_seconds)/3600.0) * 0.36 AS EstCost -- Replace 0.36 with your region's RPU price
+FROM sys_serverless_usage
+WHERE start_time >= GETDATE() - INTERVAL '30 days' -- Adjust history as needed
+GROUP BY 1
+ORDER BY 1;
+                                </code></pre>
+                            </div>
                         </div>
-                    </label>
+                        <div class="w-full lg:w-1/2">
+                            <h3 class="text-2xl font-semibold mb-4 text-gray-800 flex items-center">
+                                <span class="text-green-600 text-3xl mr-2">2️⃣</span> Step 2: Upload Your Data for Visualization
+                            </h3>
+                            <p class="text-gray-600 mb-4 text-base">
+                                Upload the CSV file you downloaded from Redshift. The chart above will automatically update with your data.
+                                <br>Expected columns: <code class="font-mono text-sm text-blue-700">Date</code>, <code class="font-mono text-sm text-blue-700">AvgRPU</code>, <code class="font-mono text-sm text-blue-700">EstCost</code>
+                            </p>
+                            <label for="dashboardCsvFileInput" class="csv-upload-area">
+                                <input type="file" id="dashboardCsvFileInput" accept=".csv">
+                                <div class="flex flex-col items-center justify-center py-4">
+                                    <span class="text-5xl mb-2 text-blue-400">☁️</span>
+                                    <p class="text-blue-800 font-bold text-lg">Drag & Drop or Click to Upload CSV</p>
+                                    <p id="dashboardUploadStatus" class="text-base mt-2 font-semibold"></p>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
                     
                     <div class="chart-container">
                         <canvas id="dashboardChart"></canvas>
@@ -315,16 +346,41 @@
                             <h2 id="kpi-title" class="text-3xl font-bold mb-3 text-gray-800"></h2>
                             <p id="kpi-description" class="text-gray-600 mb-8 leading-relaxed text-lg"></p>
                             
-                            <h3 class="text-2xl font-semibold mb-4 text-gray-800">Visualize Your Data</h3>
-                            <p id="kpiUploadInstruction" class="text-gray-600 mb-4 text-base"></p>
-                            <label for="kpiCsvFileInput" class="csv-upload-area mb-10">
-                                <input type="file" id="kpiCsvFileInput" accept=".csv">
-                                <div class="flex flex-col items-center justify-center py-4">
-                                    <span class="text-5xl mb-2 text-blue-400">📈</span>
-                                    <p class="text-blue-800 font-bold text-lg">Upload CSV for this KPI</p>
-                                    <p id="kpiUploadStatus" class="text-base mt-2 font-semibold"></p>
+                            <div class="flex flex-col lg:flex-row gap-8 mb-10">
+                                <div class="w-full lg:w-1/2">
+                                    <h3 class="text-2xl font-semibold mb-4 text-gray-800 flex items-center">
+                                        <span class="text-blue-600 text-3xl mr-2">1️⃣</span> Step 1: Get Your Data from Redshift
+                                    </h3>
+                                    <p class="text-gray-600 mb-4 text-base">
+                                        Use the following query to extract data from your Redshift Serverless instance. Execute this query in your preferred SQL client (e.g., AWS Console Query Editor, DBeaver), then download the results as a CSV file.
+                                    </p>
+                                    <div class="code-block mb-6">
+                                        <button class="copy-button" onclick="copyCode(this)">Copy</button>
+                                        <pre><code id="kpi-query"></code></pre>
+                                    </div>
+                                     <p class="text-gray-600 mb-4 text-base">
+                                        **Or, for direct visualization compatibility:** Use this specialized query. It formats the columns specifically for seamless upload to the visualization below.
+                                    </p>
+                                    <div class="code-block mb-6">
+                                        <button class="copy-button" onclick="copyCode(this)">Copy</button>
+                                        <pre><code id="kpi-csv-query"></code></pre>
+                                    </div>
                                 </div>
-                            </label>
+                                <div class="w-full lg:w-1/2">
+                                    <h3 class="text-2xl font-semibold mb-4 text-gray-800 flex items-center">
+                                        <span class="text-green-600 text-3xl mr-2">2️⃣</span> Step 2: Upload Your Data for Visualization
+                                    </h3>
+                                    <p id="kpiUploadInstruction" class="text-gray-600 mb-4 text-base"></p>
+                                    <label for="kpiCsvFileInput" class="csv-upload-area">
+                                        <input type="file" id="kpiCsvFileInput" accept=".csv">
+                                        <div class="flex flex-col items-center justify-center py-4">
+                                            <span class="text-5xl mb-2 text-blue-400">📊</span>
+                                            <p class="text-blue-800 font-bold text-lg">Drag & Drop or Click to Upload CSV</p>
+                                            <p id="kpiUploadStatus" class="text-base mt-2 font-semibold"></p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
 
                             <div id="kpi-chart-container-wrapper" class="mb-10">
                                <div class="chart-container">
@@ -333,12 +389,6 @@
                             </div>
                              <div id="kpi-table-container" class="hidden overflow-x-auto mb-10 card"></div>
                             
-                            <h3 class="text-2xl font-semibold mb-4 mt-10 text-gray-800">Admin Query</h3>
-                             <div class="code-block mb-10">
-                                <button class="copy-button" onclick="copyCode(this)">Copy</button>
-                                <pre><code id="kpi-query"></code></pre>
-                            </div>
-
                             <h3 class="text-2xl font-semibold mb-4 mt-10 text-gray-800">Analysis and Implications</h3>
                             <div id="kpi-analysis" class="prose max-w-none text-gray-700 leading-relaxed text-lg"></div>
                         </div>
@@ -406,7 +456,17 @@
     lock_wait_time AS lock_wait_us,
     queue_time AS queue_us
 FROM sys_query_history
-WHERE start_time >= GETDATE() - INTERVAL '7 days' -- Serverless retains 5-7 days of history [19]
+WHERE start_time >= GETDATE() - INTERVAL '7 days' -- Serverless retains 5-7 days of history
+ORDER BY elapsed_time DESC
+LIMIT 10;`,
+                    csvQuery: `SELECT
+    query_id AS QueryID,
+    planning_time / 1000.0 AS PlanningTimeMs,
+    queue_time / 1000.0 AS QueueTimeMs,
+    lock_wait_time / 1000.0 AS LockWaitTimeMs,
+    execution_time / 1000.0 AS ExecutionTimeMs
+FROM sys_query_history
+WHERE start_time >= GETDATE() - INTERVAL '24 hours'
 ORDER BY elapsed_time DESC
 LIMIT 10;`,
                     analysis: `<ul>
@@ -439,6 +499,14 @@ FROM sys_query_history
 WHERE start_time >= GETDATE() - INTERVAL '24 hours'
 GROUP BY 1
 ORDER BY 1;`,
+                    csvQuery: `SELECT
+    TO_CHAR(date_trunc('hour', start_time), 'YYYY-MM-DD HH24:MI') AS Hour,
+    SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS QueuedQueries,
+    SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS RunningQueries
+FROM sys_query_history
+WHERE start_time >= GETDATE() - INTERVAL '24 hours'
+GROUP BY 1
+ORDER BY 1;`,
                     analysis: `<ul>
                         <li class="mb-2"><strong>Persistent High Queue:</strong> Suggests the configured Max RPU is too low or that workloads are too bursty for the scaling mechanism to keep up. When queries consistently queue, the system has hit its compute ceiling, degrading performance. Re-evaluate the Max RPU setting.</li>
                         <li class="mb-2"><strong>Sudden Spikes in Queue:</strong> A sharp, short-lived spike might not be a capacity issue but a single "runaway" query or a transaction lock blocking subsequent queries. Use other KPIs to investigate the specific cause.</li>
@@ -462,6 +530,14 @@ ORDER BY 1;`,
     error_message,
     COUNT(*) AS error_count,
     CAST(COUNT(*) AS DECIMAL) * 100.0 / SUM(COUNT(*)) OVER () AS percentage
+FROM sys_query_history
+WHERE status = 'aborted'
+AND start_time >= GETDATE() - INTERVAL '24 hours'
+GROUP BY error_message
+ORDER BY error_count DESC;`,
+                    csvQuery: `SELECT
+    error_message AS ErrorMessage,
+    COUNT(*) AS ErrorCount
 FROM sys_query_history
 WHERE status = 'aborted'
 AND start_time >= GETDATE() - INTERVAL '24 hours'
@@ -497,6 +573,14 @@ FROM sys_serverless_usage
 WHERE start_time >= GETDATE() - INTERVAL '7 days'
 GROUP BY 1
 ORDER BY 1;`,
+                    csvQuery: `SELECT
+    TO_CHAR(date_trunc('day', start_time), 'YYYY-MM-DD') AS Day,
+    AVG(compute_capacity) AS AvgRPU,
+    MAX(compute_capacity) AS MaxRPU
+FROM sys_serverless_usage
+WHERE start_time >= GETDATE() - INTERVAL '7 days'
+GROUP BY 1
+ORDER BY 1;`,
                     analysis: `<ul>
                         <li class="mb-2"><strong>Consistently High Avg RPU:</strong> If avg_rpu is near max_rpu and queries are queuing, the system is resource-constrained. The Max RPU setting is likely too low to handle the workload, capping the AI-driven scaling. Increase Max RPU to improve performance, but be mindful of cost implications.</li>
                         <li class="mb-2"><strong>Flat RPU Usage:</strong> If RPU usage is flat despite variable workloads, the AI-driven scaling profile may be too heavily skewed towards cost savings, sacrificing performance. Adjust the profile towards a "Balanced" or "Performance-Optimized" setting.</li>
@@ -526,6 +610,15 @@ WHERE q.start_time >= GETDATE() - INTERVAL '24 hours'
 GROUP BY 1, 2
 ORDER BY total_input_bytes DESC
 LIMIT 10;`,
+                    csvQuery: `SELECT
+    SUBSTRING(q.query_text, 1, 50) AS QuerySnippet,
+    SUM(d.input_bytes) / (1024.0 * 1024.0 * 1024.0) AS TotalInputGB
+FROM sys_query_history q
+JOIN sys_query_detail d ON q.query_id = d.query_id
+WHERE q.start_time >= GETDATE() - INTERVAL '24 hours'
+GROUP BY 1
+ORDER BY TotalInputGB DESC
+LIMIT 10;`,
                     analysis: `<ul>
                         <li class="mb-2"><strong>High Input, Low Output:</strong> If a query reads a lot of data (high input_bytes) but produces few result rows, it's a classic sign of inefficient filtering. The query is scanning and discarding massive amounts of data. Optimize by applying WHERE clauses that leverage sort keys.</li>
                         <li class="mb-2"><strong>High Intermediate Output:</strong> If a single step in a query plan generates a massive intermediate result, it often precedes a disk spill. This is typically caused by inefficient joins (e.g., Cartesian products). Review the EXPLAIN plan and optimize join conditions.</li>
@@ -554,6 +647,19 @@ LIMIT 10;`,
     d.input_bytes AS step_input_bytes,
     d.output_bytes AS step_output_bytes,
     d.is_diskbased
+FROM sys_query_history q
+JOIN sys_query_detail d ON q.query_id = d.query_id
+WHERE d.is_diskbased = 't'
+AND q.start_time >= GETDATE() - INTERVAL '24 hours'
+ORDER BY d.input_bytes DESC
+LIMIT 10;`,
+                    csvQuery: `SELECT
+    q.query_id AS QueryID,
+    SUBSTRING(q.query_text, 1, 50) AS QuerySnippet,
+    d.step_name AS StepName,
+    (d.input_bytes / (1024.0 * 1024.0)) AS InputBytes, -- Convert to MB
+    (d.output_bytes / (1024.0 * 1024.0)) AS OutputBytes, -- Convert to MB
+    d.is_diskbased AS DiskBased
 FROM sys_query_history q
 JOIN sys_query_detail d ON q.query_id = d.query_id
 WHERE d.is_diskbased = 't'
@@ -592,6 +698,14 @@ LIMIT 10;`,
 FROM svv_table_info
 WHERE skew_rows > 1.5 OR unsorted > 10.0 OR stats_off > 50.0
 ORDER BY skew_rows DESC, unsorted DESC, stats_off DESC;`,
+                    csvQuery: `SELECT
+    "table" AS TableName,
+    skew_rows AS RowSkewRatio,
+    unsorted AS UnsortedPercent,
+    stats_off AS StatsOffPercent
+FROM svv_table_info
+WHERE skew_rows > 1.5 OR unsorted > 10.0 OR stats_off > 50.0
+ORDER BY skew_rows DESC, unsorted DESC, stats_off DESC;`,
                     analysis: `<ul>
                         <li class="mb-2"><strong>High Skew:</strong> When data is unevenly distributed, one or a few compute nodes become "hot spots," disproportionately processing a large volume of data. This leads to a performance bottleneck where the overall query completion time is dictated by the slowest node. If a query performs joins or aggregations on a highly skewed distribution key, it necessitates massive data redistribution across nodes, causing significant performance degradation and potentially leading to disk spills. The underlying issue is often a suboptimal table <code>DISTSTYLE</code> or <code>DISTKEY</code> choice. This situation requires a re-evaluation of the table's distribution strategy, potentially necessitating a table redesign or considering the use of <code>ALL</code> distribution for smaller dimension tables that are frequently joined with large fact tables.</li>
                         <li class="mb-2"><strong>High Unsorted %:</strong> Amazon Redshift's columnar storage and zone maps are highly optimized for data that is physically sorted according to defined sort keys. If data is unsorted, the query optimizer cannot effectively leverage these mechanisms to skip irrelevant data blocks, forcing it to scan more data than necessary. This directly increases I/O operations and prolongs <code>execution_time</code>. While Redshift Serverless includes automated <code>VACUUM</code> operations, a consistently high <code>unsorted</code> value suggests that the automated process might not be keeping pace with the rate of data changes, or that the initial sort key design is not optimal for the current data ingestion patterns. This indicates a need to review the <code>VACUUM</code> strategy, potentially scheduling manual <code>VACUUM</code> operations during off-peak hours, or re-evaluating the table design to ensure data is sorted more frequently and effectively.</li>
@@ -615,6 +729,12 @@ ORDER BY skew_rows DESC, unsorted DESC, stats_off DESC;`,
                     query: `SELECT
     "table",
     stats_off
+FROM svv_table_info
+WHERE stats_off > 50.0
+ORDER BY stats_off DESC;`,
+                    csvQuery: `SELECT
+    "table" AS TableName,
+    stats_off AS StatsOffPercent
 FROM svv_table_info
 WHERE stats_off > 50.0
 ORDER BY stats_off DESC;`,
@@ -644,6 +764,12 @@ ORDER BY stats_off DESC;`,
 FROM sys_load_history
 GROUP BY exec_day
 ORDER BY exec_day DESC;`,
+                    csvQuery: `SELECT
+    TO_CHAR(date_trunc('day', start_time), 'YYYY-MM-DD') AS Date,
+    SUM(loaded_rows) / 1000000.0 AS RowsLoadedMillions
+FROM sys_load_history
+GROUP BY 1
+ORDER BY 1;`,
                     analysis: `<ul>
                         <li class="mb-2"><strong>Slow COPY Duration/High Errors:</strong> Can be caused by external factors (S3 connectivity, IAM permissions) or inefficient command parameters (not using multiple files, not loading in sort key order). Check SYS_LOAD_ERROR_DETAIL for specifics and review data loading best practices.</li>
                         <li class="mb-2"><strong>Slow UNLOAD Duration:</strong> For large datasets, this may indicate issues with the destination S3 bucket or not leveraging parallel unloading. Ensure the UNLOAD command is configured for parallel execution.</li>
@@ -677,6 +803,13 @@ FROM sys_serverless_usage
 WHERE start_time >= GETDATE() - INTERVAL '30 days' -- Extend history for trend analysis
 GROUP BY 1
 ORDER BY 1;`,
+                    csvQuery: `SELECT
+    TO_CHAR(date_trunc('day', start_time), 'YYYY-MM-DD') AS Date,
+    (SUM(charged_seconds)/3600.0) * 0.36 AS EstimatedDailyCost -- Replace 0.36 with your region's RPU price
+FROM sys_serverless_usage
+WHERE start_time >= GETDATE() - INTERVAL '30 days'
+GROUP BY 1
+ORDER BY 1;`,
                     analysis: `<ul>
                         <li class="mb-2"><strong>Unexpected Cost Spikes:</strong> If costs surge without a corresponding increase in business activity, it signals inefficient resource consumption. This could be driven by a few unoptimized, expensive queries or overhead from "cold starts" for infrequent workloads. Scrutinize cost drivers beyond just total RPU-hours.</li>
                         <li class="mb-2"><strong>High Base Cost:</strong> If the base RPU (min_rpu) is high relative to the average for a spiky workload, you are paying for idle capacity, which diminishes the "pay-per-use" benefit. Fine-tune the base RPU and Max RPU settings to align more closely with actual workload patterns and ensure the AI-driven scaling profile is configured to prioritize cost savings if that aligns with the workload's criticality and performance requirements.</li>
@@ -698,16 +831,16 @@ ORDER BY 1;`,
                 }
             ],
             optimizationStrategies: [
-                { 
-                    title: 'Query Optimization Best Practices', 
+                {
+                    title: 'Query Optimization Best Practices',
                     points: [
                         '<strong>Avoid <code class="font-mono text-xs text-gray-700">SELECT *</code></strong>: Only select the columns you need to reduce I/O and data processing.',
                         '<strong>Filter Early with <code class="font-mono text-xs text-gray-700">WHERE</code> Clauses</strong>: Apply predicates as early as possible to minimize the dataset size before complex operations like joins or aggregations.',
                         '<strong>Use Materialized Views (MVs)</strong>: Pre-compute and store results of complex, recurring queries to dramatically speed up analytical dashboards and reports.'
                     ]
                 },
-                { 
-                    title: 'Table Design Principles', 
+                {
+                    title: 'Table Design Principles',
                     points: [
                         '<strong>Choose Optimal Sort Keys</strong>: Base sort keys on columns frequently used in <code class="font-mono text-xs text-gray-700">WHERE</code> clauses or <code class="font-mono text-xs text-gray-700">JOIN</code> conditions to improve data pruning and query performance.',
                         '<strong>Select Effective Distribution Styles</strong>: Use <code class="font-mono text-xs text-gray-700">KEY</code> distribution on common join columns, <code class="font-mono text-xs text-gray-700">ALL</code> for smaller dimensions, or <code class="font-mono text-xs text-gray-700">EVEN</code> as a default.',
@@ -988,6 +1121,7 @@ ORDER BY 1;`,
             document.getElementById('kpi-title').textContent = kpiData.title;
             document.getElementById('kpi-description').textContent = kpiData.description;
             document.getElementById('kpi-query').textContent = kpiData.query;
+            document.getElementById('kpi-csv-query').textContent = kpiData.csvQuery; // Display the CSV-specific query
             document.getElementById('kpi-analysis').innerHTML = kpiData.analysis;
             
             const expectedColsText = kpiData.expectedCsvCols.map(col => `<code class="font-mono text-sm text-blue-700">${col}</code>`).join(', ');
